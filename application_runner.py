@@ -1,130 +1,141 @@
 import requests
+from bs4 import BeautifulSoup
 from selenium import webdriver
-from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.firefox.service import Service
-from webdriver_manager.firefox import GeckoDriverManager
-import time
-import re
+from webdriver_manager.chrome import ChromeDriverManager
 import tkinter as tk
+from data_handler import track_job_application
+import time
+
+def get_job_listings(url, log_text):
+    log_message(log_text, f"Fetching job listings from {url}...")
+    jobs = []
+    page = 1
+
+    while True:
+        paginated_url = f"{url}&start={page * 25}"
+        log_message(log_text, f"Fetching page {page}...")
+        response = requests.get(paginated_url)
+        soup = BeautifulSoup(response.text, 'html.parser')
+
+        job_elements = soup.find_all('div', class_='job-card-container')
+
+        if not job_elements:
+            log_message(log_text, "No more job listings found.")
+            break
+
+        for job_element in job_elements:
+            title_element = job_element.find('h3', class_='job-card-list__title')
+            company_element = job_element.find('h4', class_='job-card-container__company-name')
+            location_element = job_element.find('span', class_='job-card-container__metadata-item')
+            link_element = job_element.find('a', class_='job-card-container__link')
+            description_element = job_element.find('p', class_='job-card-container__snippet')
+
+            if title_element and company_element and location_element and link_element:
+                title = title_element.text.strip()
+                company = company_element.text.strip()
+                location = location_element.text.strip()
+                link = 'https://www.linkedin.com' + link_element['href']
+                description = description_element.text.strip() if description_element else ""
+
+                jobs.append({
+                    'title': title,
+                    'company': company,
+                    'location': location,
+                    'link': link,
+                    'description': description
+                })
+
+        log_message(log_text, f"Found {len(job_elements)} jobs on page {page}.")
+        page += 1
+        time.sleep(1)  # To prevent rate limiting
+
+    log_message(log_text, f"Total jobs found: {len(jobs)}")
+    return jobs
+
+def filter_jobs(jobs, filters, log_text):
+    log_message(log_text, "Filtering jobs based on keywords and criteria...")
+    filtered_jobs = []
+    for job in jobs:
+        match = True
+        if 'keywords' in filters:
+            match = all(keyword.lower() in job['title'].lower() for keyword in filters['keywords'])
+        if match and 'remote' in filters and filters['remote']:
+            match = match and ('remote' in job['location'].lower() or 'home' in job['location'].lower())
+        if match and 'full_time' in filters and filters['full_time']:
+            match = match and ('full-time' in job['description'].lower() or 'full time' in job['description'].lower())
+        if match and 'salary_range' in filters:
+            salary_match = False
+            for salary in filters['salary_range']:
+                if salary.lower() in job['description'].lower():
+                    salary_match = True
+                    break
+            match = match and salary_match
+
+        if match:
+            filtered_jobs.append(job)
+
+    log_message(log_text, f"{len(filtered_jobs)} jobs matched the filters.")
+    return filtered_jobs
+
+def apply_for_job(job, config, frame, log_text):
+    try:
+        if config.get('debug_mode', False):
+            result = "Debug - No Application Sent"
+        else:
+            driver = webdriver.Chrome(ChromeDriverManager().install())
+            driver.get(job['link'])
+
+            # Fill out the application form
+            name_field = driver.find_element_by_id(config['form_fields']['name_field_id'])
+            email_field = driver.find_element_by_id(config['form_fields']['email_field_id'])
+            resume_field = driver.find_element_by_id(config['form_fields']['resume_field_id'])
+
+            name_field.send_keys(config['personal_info']['name'])
+            email_field.send_keys(config['personal_info']['email'])
+            resume_field.send_keys(config['personal_info']['resume_path'])
+
+            submit_button = driver.find_element_by_id(config['form_fields']['submit_button_id'])
+            submit_button.click()
+
+            driver.quit()
+
+            result = "Success"
+        job_label = tk.Label(frame, text=f"{job['title']} - {result}")
+        job_label.pack()
+
+        log_message(log_text, f"Applied to {job['title']} at {job['company']} - {result}")
+
+        if not config.get('debug_mode', False):
+            track_job_application(job, config['google_sheets']['spreadsheet_id'])
+
+    except Exception as e:
+        result = f"Failed: {str(e)}"
+        log_message(log_text, f"Error applying to {job['title']} at {job['company']}: {result}")
+
+        job_label = tk.Label(frame, text=f"{job['title']} - {result}")
+        job_label.pack()
 
 def start_applying(frame, config, log_text):
-    def log(message):
-        log_text.insert(tk.END, message + '\n')
-        log_text.see(tk.END)
-    
-    # Log into LinkedIn
-    linkedin_credentials = config.get("linkedin_credentials", {})
-    username = linkedin_credentials.get("username")
-    password = linkedin_credentials.get("password")
+    url = config['job_site_url']
+    jobs = get_job_listings(url, log_text)
+    filtered_jobs = filter_jobs(jobs, config['filters'], log_text)
 
-    if not username or not password:
-        log("LinkedIn credentials are missing.")
-        return
-
-    options = webdriver.FirefoxOptions()
-    options.add_argument("--start-maximized")
-
-    try:
-        driver = webdriver.Firefox(service=Service(GeckoDriverManager().install()), options=options)
-    except Exception as e:
-        log(f"Error: {e}\nPlease ensure Firefox is installed.")
-        return
-
-    try:
-        driver.get("https://www.linkedin.com/login")
-
-        WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.ID, "username"))
-        )
-
-        username_field = driver.find_element(By.ID, "username")
-        username_field.clear()
-        username_field.send_keys(username)
-
-        password_field = driver.find_element(By.ID, "password")
-        password_field.clear()
-        password_field.send_keys(password)
-        password_field.send_keys(Keys.RETURN)
-
-        WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.ID, "profile-nav-item"))
-        )
-
-        log("Successfully logged into LinkedIn.")
-
-        # Add code to apply for jobs using the provided filters
-
-    except Exception as e:
-        log(f"An error occurred: {e}")
-    finally:
-        time.sleep(5)  # Optional: wait for a few seconds to see the result
-        driver.quit()
+    for job in filtered_jobs:
+        apply_for_job(job, config, frame, log_text)
 
 def get_keywords_from_url(url):
-    # Dummy implementation to simulate keyword extraction
-    return ["developer", "engineer", "python"]
+    response = requests.get(url)
+    soup = BeautifulSoup(response.text, 'html.parser')
+    keywords = set()
 
-def load_client_config(file_path="credentials/credentials.json"):
-    with open(file_path, 'r') as file:
-        return json.load(file)
+    for job_element in soup.find_all('div', class_='job-card-container'):
+        title = job_element.find('h3', class_='job-card-list__title').text.strip()
+        for word in title.split():
+            keywords.add(word.lower())
 
-def save_to_csv(data, filename="scraped_data.csv"):
-    import pandas as pd
-    df = pd.DataFrame(data)
-    df.to_csv(filename, index=False)
+    return list(keywords)
 
-def extract_spreadsheet_id(url):
-    match = re.search(r"/d/([a-zA-Z0-9-_]+)", url)
-    if match:
-        return match.group(1)
-    else:
-        raise ValueError("Invalid Google Sheets URL format")
-
-def get_authenticated_session(client_config, token_file="credentials/token.json"):
-    from google.oauth2.credentials import Credentials
-    from google_auth_oauthlib.flow import InstalledAppFlow
-    from google.auth.transport.requests import Request
-    creds = None
-    if os.path.exists(token_file):
-        creds = Credentials.from_authorized_user_file(token_file, ["https://www.googleapis.com/auth/spreadsheets"])
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_config(client_config, ["https://www.googleapis.com/auth/spreadsheets"])
-            creds = flow.run_local_server(port=0)
-        with open(token_file, 'w') as token:
-            token.write(creds.to_json())
-
-    session = requests.Session()
-    session.headers.update({'Authorization': f'Bearer {creds.token}'})
-    return session
-
-def upload_to_google_sheets(data, spreadsheet_url, range_name="Sheet1!A1", token_file="credentials/token.json"):
-    client_config = load_client_config()
-
-    try:
-        spreadsheet_id = extract_spreadsheet_id(spreadsheet_url)
-    except ValueError as e:
-        print(f"Error: {e}")
-        return False
-
-    url = f"https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}/values/{range_name}:append?valueInputOption=RAW"
-    headers = {"Content-Type": "application/json"}
-    payload = {
-        "range": range_name,
-        "majorDimension": "ROWS",
-        "values": data
-    }
-
-    try:
-        session = get_authenticated_session(client_config, token_file)
-        response = session.post(url, headers=headers, data=json.dumps(payload))
-        response.raise_for_status()
-        return True
-    except requests.exceptions.HTTPError as error:
-        print(f"Error uploading to Google Sheets: {error}")
-        return False
+def log_message(log_text, message):
+    log_text.insert(tk.END, message + '\n')
+    log_text.see(tk.END)

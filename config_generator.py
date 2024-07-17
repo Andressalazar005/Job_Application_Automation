@@ -1,13 +1,7 @@
+import json
+
 def generate_config_template(jobs):
-    key = load_key()
-    
-    # Example LinkedIn credentials
-    linkedin_username = "your_linkedin_username"
-    linkedin_password = "your_linkedin_password"
-    
-    encrypted_username, encrypted_password = encrypt_credentials(linkedin_username, linkedin_password, key)
-    
-    # Configuration template
+    # This function generates a configuration template based on common fields found in job postings
     common_fields = {
         "job_site_url": "https://www.example.com/jobs",
         "personal_info": {
@@ -26,10 +20,6 @@ def generate_config_template(jobs):
         },
         "google_sheets": {
             "spreadsheet_id": "your_google_sheet_id"
-        },
-        "linkedin_credentials": {
-            "username": encrypted_username,
-            "password": encrypted_password
         }
     }
     

@@ -159,6 +159,5 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 credentials.json
+secret.key
 config.json
-config.json
-"G:/git_repos/PythonProjs/Py_Projects/Job_Application_Automation/config.json" 
