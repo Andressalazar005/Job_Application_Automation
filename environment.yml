@@ -14,3 +14,6 @@ dependencies:
   - pip:
     - selenium
     - webdriver-manager
+    - chromedriver-autoinstaller
+    - cryptography
+    - geckodriver-autoinstaller

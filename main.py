@@ -1,5 +1,3 @@
-import os
-import json
 import tkinter as tk
 from config_gui import ConfigGUI  # Import ConfigGUI
 
