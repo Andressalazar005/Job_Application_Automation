@@ -1,7 +1,7 @@
 {
-    "job_site_url": "https://www.monster.com/jobs/search?q=game+developer&where=Remote&page=1&so=m.h.s",
+    "job_site_url": "https://www.linkedin.com/jobs/search/?currentJobId=3953244306&distance=25&f_WT=2&geoId=90000049&keywords=software%20engineer&origin=JOBS_HOME_SEARCH_CARDS",
     "personal_info": {
-        "name": "Andres Salazar ",
+        "name": "Andres Camilo Salazar ",
         "email": "andres.salazar005@live.com",
         "resume_path": "C:/Users/Andre/Downloads/AndresSalazar_Resume (1).pdf"
     },
@@ -15,7 +15,7 @@
         "keywords": []
     },
     "google_sheets": {
-        "spreadsheet_id": "1212525990"
+        "spreadsheet_id": "https://docs.google.com/spreadsheets/d/12rPjWuZKlDo9q9UterDnqNTEBWrq_HrURzlv0lVR5VE/edit?pli=1&gid=1212525990#gid=1212525990"
     },
     "debug_mode": true
 }
